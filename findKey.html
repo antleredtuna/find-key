@@ -1,0 +1,1205 @@
+<!-- index.html - Key Finder Web App -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Key Finder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* ========================================
+       CSS Variables & Reset
+       ======================================== */
+    :root {
+      --bg-primary: #0a0a0f;
+      --bg-secondary: #12121a;
+      --bg-tertiary: #1a1a26;
+      --bg-card: #16161f;
+      --text-primary: #e8e6f0;
+      --text-secondary: #8a879c;
+      --text-muted: #55526a;
+      --accent-cyan: #00e5cc;
+      --accent-cyan-dim: rgba(0, 229, 204, 0.15);
+      --accent-amber: #ffb340;
+      --accent-amber-dim: rgba(255, 179, 64, 0.15);
+      --accent-rose: #ff5c8a;
+      --accent-rose-dim: rgba(255, 92, 138, 0.15);
+      --confidence-high: #00e5cc;
+      --confidence-mid: #ffb340;
+      --confidence-low: #ff5c8a;
+      --border-subtle: rgba(255, 255, 255, 0.06);
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --font-mono: 'JetBrains Mono', monospace;
+      --font-sans: 'DM Sans', sans-serif;
+    }
+
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      touch-action: manipulation;
+    }
+
+    /* ========================================
+       App Layout
+       ======================================== */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 16px 16px 24px;
+      gap: 12px;
+    }
+
+    /* ========================================
+       Header
+       ======================================== */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 0;
+      flex-shrink: 0;
+    }
+
+    .header h1 {
+      font-family: var(--font-mono);
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, var(--accent-cyan), #7c6fff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ========================================
+       Detector & Window Selectors
+       ======================================== */
+    .selector-row {
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .selector {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .selector label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      padding-left: 2px;
+    }
+
+    .selector select {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      padding: 8px 10px;
+      appearance: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a879c' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+    }
+
+    .selector select:focus {
+      outline: none;
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 0 2px var(--accent-cyan-dim);
+    }
+
+    /* ========================================
+       Key Display - The hero section
+       ======================================== */
+    .key-display {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      text-align: center;
+      flex-shrink: 0;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .key-display::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(ellipse at center, var(--accent-cyan-dim) 0%, transparent 60%);
+      opacity: 0;
+      transition: opacity 0.6s ease;
+      pointer-events: none;
+    }
+
+    .key-display.active::before {
+      opacity: 1;
+    }
+
+    .key-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .key-value {
+      font-family: var(--font-mono);
+      font-size: 52px;
+      font-weight: 700;
+      letter-spacing: -2px;
+      color: var(--text-primary);
+      line-height: 1.1;
+      transition: color 0.3s ease;
+      min-height: 58px;
+    }
+
+    .key-value.detected {
+      color: var(--accent-cyan);
+    }
+
+    .key-confidence {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    /* ========================================
+       Current Note Display
+       ======================================== */
+    .current-note {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 14px 18px;
+      flex-shrink: 0;
+    }
+
+    .current-note-left {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .note-name {
+      font-family: var(--font-mono);
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--text-primary);
+      min-width: 56px;
+      transition: color 0.15s ease;
+    }
+
+    .note-octave {
+      font-family: var(--font-mono);
+      font-size: 16px;
+      font-weight: 400;
+      color: var(--text-secondary);
+    }
+
+    .note-freq {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .current-note-right {
+      text-align: right;
+    }
+
+    .confidence-value {
+      font-family: var(--font-mono);
+      font-size: 22px;
+      font-weight: 600;
+      transition: color 0.15s ease;
+    }
+
+    .confidence-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+    }
+
+    /* ========================================
+       Note History - Scrollable cascade
+       ======================================== */
+    .history-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 2px 8px;
+      flex-shrink: 0;
+    }
+
+    .history-header span {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+    }
+
+    .history-clear {
+      background: none;
+      border: none;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: var(--radius-sm);
+      transition: color 0.2s, background 0.2s;
+    }
+
+    .history-clear:hover, .history-clear:active {
+      color: var(--accent-rose);
+      background: var(--accent-rose-dim);
+    }
+
+    .history-list {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
+      -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
+    }
+
+    .history-item {
+      display: flex;
+      align-items: center;
+      padding: 6px 8px;
+      gap: 12px;
+      border-radius: var(--radius-sm);
+      animation: slideIn 0.2s ease-out;
+      transition: opacity 0.3s ease;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .history-note-pip {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .history-note-name {
+      font-family: var(--font-mono);
+      font-size: 15px;
+      font-weight: 600;
+      min-width: 36px;
+    }
+
+    .history-note-freq {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      flex: 1;
+    }
+
+    .history-note-time {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    /* ========================================
+       Start/Stop Button
+       ======================================== */
+    .control-btn {
+      flex-shrink: 0;
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: var(--radius-md);
+      font-family: var(--font-mono);
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .control-btn.start {
+      background: linear-gradient(135deg, var(--accent-cyan), #00b3a6);
+      color: var(--bg-primary);
+    }
+
+    .control-btn.start:active {
+      transform: scale(0.98);
+    }
+
+    .control-btn.stop {
+      background: var(--bg-tertiary);
+      color: var(--accent-rose);
+      border: 1px solid rgba(255, 92, 138, 0.2);
+    }
+
+    .control-btn.stop:active {
+      transform: scale(0.98);
+      background: var(--accent-rose-dim);
+    }
+
+    /* ========================================
+       Pitch Class Distribution Bar
+       ======================================== */
+    .pitch-distribution {
+      display: flex;
+      gap: 3px;
+      align-items: flex-end;
+      height: 40px;
+      padding: 0 4px;
+      flex-shrink: 0;
+    }
+
+    .pitch-bar-wrapper {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      height: 100%;
+    }
+
+    .pitch-bar {
+      width: 100%;
+      flex: 1;
+      border-radius: 2px 2px 0 0;
+      background: var(--bg-tertiary);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .pitch-bar-fill {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--accent-cyan);
+      border-radius: 2px 2px 0 0;
+      transition: height 0.15s ease;
+      opacity: 0.7;
+    }
+
+    .pitch-bar-label {
+      font-family: var(--font-mono);
+      font-size: 8px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    /* ========================================
+       Status indicators
+       ======================================== */
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      transition: background 0.3s ease;
+    }
+
+    .status-dot.listening {
+      background: var(--accent-cyan);
+      box-shadow: 0 0 8px var(--accent-cyan);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* ========================================
+       Utility / Scrollbar
+       ======================================== */
+    .history-list::-webkit-scrollbar {
+      width: 3px;
+    }
+    .history-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .history-list::-webkit-scrollbar-thumb {
+      background: var(--bg-tertiary);
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <div class="header">
+      <h1>KEY FINDER</h1>
+      <div class="header-controls">
+        <div class="status-dot" id="statusDot"></div>
+      </div>
+    </div>
+
+    <!-- Detector & Analysis Window selectors -->
+    <div class="selector-row">
+      <div class="selector">
+        <label>Detector</label>
+        <select id="detectorSelect">
+          <option value="pitchy" selected>Pitchy (McLeod)</option>
+          <!-- Phase 2: additional detectors -->
+          <!-- <option value="crepe">ML5 CREPE</option> -->
+          <!-- <option value="aubio">Aubio (YIN)</option> -->
+        </select>
+      </div>
+      <div class="selector">
+        <label>Analysis Window</label>
+        <select id="windowSelect">
+          <option value="0">All Time</option>
+          <option value="10">Last 10s</option>
+          <option value="30" selected>Last 30s</option>
+          <option value="60">Last 60s</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Estimated Key -->
+    <div class="key-display" id="keyDisplay">
+      <div class="key-label">Estimated Key</div>
+      <div class="key-value" id="keyValue">—</div>
+      <div class="key-confidence" id="keyConfidence">waiting for input</div>
+    </div>
+
+    <!-- Pitch Class Distribution -->
+    <div class="pitch-distribution" id="pitchDistribution"></div>
+
+    <!-- Current Note -->
+    <div class="current-note">
+      <div class="current-note-left">
+        <span class="note-name" id="noteName">—</span>
+        <span class="note-octave" id="noteOctave"></span>
+        <span class="note-freq" id="noteFreq"></span>
+      </div>
+      <div class="current-note-right">
+        <div class="confidence-value" id="noteConfidence">—</div>
+        <div class="confidence-label">Clarity</div>
+      </div>
+    </div>
+
+    <!-- Note History -->
+    <div class="history-section">
+      <div class="history-header">
+        <span>Note History</span>
+        <button class="history-clear" id="clearHistory">CLEAR</button>
+      </div>
+      <div class="history-list" id="historyList"></div>
+    </div>
+
+    <!-- Start / Stop -->
+    <button class="control-btn start" id="controlBtn">START LISTENING</button>
+  </div>
+
+  <!-- =============================================
+       JavaScript - Modular Architecture
+       ============================================= -->
+  <script type="module">
+
+    // =============================================
+    // Music Theory Utilities
+    // =============================================
+    const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+    /**
+     * Convert a frequency in Hz to the nearest MIDI note number.
+     * MIDI 69 = A4 = 440 Hz.
+     */
+    function freqToMidi(freq) {
+      return 69 + 12 * Math.log2(freq / 440);
+    }
+
+    /**
+     * Get note name and octave from a frequency.
+     * Returns { name, octave, pitchClass, centsOff }
+     */
+    function freqToNote(freq) {
+      const midi = freqToMidi(freq);
+      const rounded = Math.round(midi);
+      const centsOff = Math.round((midi - rounded) * 100);
+      const pitchClass = ((rounded % 12) + 12) % 12;
+      const octave = Math.floor(rounded / 12) - 1;
+      return {
+        name: NOTE_NAMES[pitchClass],
+        octave,
+        pitchClass,
+        centsOff,
+        midi: rounded
+      };
+    }
+
+    // =============================================
+    // Krumhansl-Schmuckler Key Estimation
+    // =============================================
+
+    /**
+     * Krumhansl-Kessler key profiles derived from probe-tone experiments.
+     * Index 0 = tonic, then chromatically ascending.
+     * These are the original values from Krumhansl (1990).
+     */
+    const KK_MAJOR_PROFILE = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
+    const KK_MINOR_PROFILE = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
+
+    /**
+     * Calculate the Pearson correlation coefficient between two arrays.
+     */
+    function pearsonCorrelation(x, y) {
+      const n = x.length;
+      let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, sumY2 = 0;
+      for (let i = 0; i < n; i++) {
+        sumX += x[i];
+        sumY += y[i];
+        sumXY += x[i] * y[i];
+        sumX2 += x[i] * x[i];
+        sumY2 += y[i] * y[i];
+      }
+      const numerator = n * sumXY - sumX * sumY;
+      const denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+      if (denominator === 0) return 0;
+      return numerator / denominator;
+    }
+
+    /**
+     * Rotate an array by `shift` positions.
+     * Used to generate profiles for all 12 keys from the C-based template.
+     */
+    function rotateArray(arr, shift) {
+      const n = arr.length;
+      const result = new Array(n);
+      for (let i = 0; i < n; i++) {
+        result[i] = arr[((i - shift) % n + n) % n];
+      }
+      return result;
+    }
+
+    /**
+     * Estimate the most likely key from a pitch class histogram.
+     * @param {number[]} histogram - Array of 12 values (C through B) representing
+     *   the count/weight of each pitch class in the analysis window.
+     * @returns {{ key: string, correlation: number, allCorrelations: object[] }}
+     */
+    function estimateKey(histogram) {
+      // Check if there's any data at all
+      const total = histogram.reduce((a, b) => a + b, 0);
+      if (total === 0) return { key: null, correlation: 0, allCorrelations: [] };
+
+      const results = [];
+
+      for (let tonic = 0; tonic < 12; tonic++) {
+        // Rotate the profile so that index 0 aligns with the current tonic
+        const majorProfile = rotateArray(KK_MAJOR_PROFILE, tonic);
+        const minorProfile = rotateArray(KK_MINOR_PROFILE, tonic);
+
+        const majorCorr = pearsonCorrelation(histogram, majorProfile);
+        const minorCorr = pearsonCorrelation(histogram, minorProfile);
+
+        results.push({
+          key: `${NOTE_NAMES[tonic]} Major`,
+          correlation: majorCorr,
+          tonic,
+          mode: 'major'
+        });
+        results.push({
+          key: `${NOTE_NAMES[tonic]} Minor`,
+          correlation: minorCorr,
+          tonic,
+          mode: 'minor'
+        });
+      }
+
+      // Sort by correlation descending
+      results.sort((a, b) => b.correlation - a.correlation);
+
+      return {
+        key: results[0].key,
+        correlation: results[0].correlation,
+        tonic: results[0].tonic,
+        mode: results[0].mode,
+        allCorrelations: results
+      };
+    }
+
+    // =============================================
+    // Detector Interface (Pluggable Architecture)
+    // =============================================
+
+    /**
+     * Base detector interface. All detectors must implement:
+     *   - name: string
+     *   - async init(audioContext, stream): set up the detector
+     *   - getPitch(): { frequency: number|null, clarity: number } 
+     *   - destroy(): clean up resources
+     */
+    class BaseDetector {
+      constructor() {
+        this.name = 'base';
+      }
+      async init(audioContext, stream) {
+        throw new Error('init() must be implemented by subclass');
+      }
+      getPitch() {
+        throw new Error('getPitch() must be implemented by subclass');
+      }
+      destroy() {
+        // Override in subclass for cleanup
+      }
+    }
+
+    // =============================================
+    // Pitchy Detector (McLeod Pitch Method)
+    // =============================================
+    class PitchyDetector extends BaseDetector {
+      constructor() {
+        super();
+        this.name = 'pitchy';
+        this.analyserNode = null;
+        this.detector = null;
+        this.inputBuffer = null;
+        this.sampleRate = 0;
+      }
+
+      async init(audioContext, stream) {
+        console.log('[PitchyDetector] Initializing...');
+
+        // Dynamically import pitchy from esm.sh CDN
+        const { PitchDetector } = await import('https://esm.sh/pitchy@4');
+        console.log('[PitchyDetector] Pitchy module loaded');
+
+        this.sampleRate = audioContext.sampleRate;
+
+        // AnalyserNode captures time-domain audio data
+        // fftSize of 4096 gives us ~93ms of audio at 44100Hz - good balance
+        // of frequency resolution and time resolution for pitch detection
+        this.analyserNode = audioContext.createAnalyser();
+        this.analyserNode.fftSize = 4096;
+
+        // Connect mic stream → analyser
+        const source = audioContext.createMediaStreamSource(stream);
+        source.connect(this.analyserNode);
+        this._source = source;
+
+        // Create the pitch detector with appropriate buffer size
+        // inputLength must match the buffer we'll read from the analyser
+        const bufferLength = this.analyserNode.fftSize;
+        this.detector = PitchDetector.forFloat32Array(bufferLength);
+        this.inputBuffer = new Float32Array(bufferLength);
+
+        console.log(`[PitchyDetector] Ready. Sample rate: ${this.sampleRate}, buffer: ${bufferLength}`);
+      }
+
+      getPitch() {
+        if (!this.analyserNode || !this.detector) {
+          return { frequency: null, clarity: 0 };
+        }
+
+        // Read current audio data into our buffer
+        this.analyserNode.getFloatTimeDomainData(this.inputBuffer);
+
+        // Run pitch detection
+        // Returns [pitch_in_hz, clarity_0_to_1]
+        const [pitch, clarity] = this.detector.findPitch(this.inputBuffer, this.sampleRate);
+
+        // Filter out unreasonable values:
+        // - clarity below threshold means we're hearing noise, not a note
+        // - frequencies outside human musical range (roughly 60Hz to 5000Hz)
+        const MIN_CLARITY = 0.80;
+        const MIN_FREQ = 60;
+        const MAX_FREQ = 5000;
+
+        if (clarity < MIN_CLARITY || pitch < MIN_FREQ || pitch > MAX_FREQ) {
+          return { frequency: null, clarity };
+        }
+
+        return { frequency: pitch, clarity };
+      }
+
+      destroy() {
+        console.log('[PitchyDetector] Cleaning up');
+        if (this._source) {
+          this._source.disconnect();
+          this._source = null;
+        }
+        this.analyserNode = null;
+        this.detector = null;
+        this.inputBuffer = null;
+      }
+    }
+
+    // =============================================
+    // Detector Registry
+    // =============================================
+
+    /**
+     * Registry of available pitch detectors.
+     * Phase 2 will add 'crepe' and 'aubio' entries here.
+     */
+    const DETECTOR_REGISTRY = {
+      pitchy: () => new PitchyDetector(),
+      // Phase 2 additions:
+      // crepe: () => new CrepeDetector(),
+      // aubio: () => new AubioDetector(),
+    };
+
+    // =============================================
+    // Note Store (Analysis Window)
+    // =============================================
+
+    /**
+     * Stores detected notes with timestamps.
+     * Supports time-windowed queries for the key estimation algorithm.
+     */
+    class NoteStore {
+      constructor() {
+        this.notes = []; // { timestamp, frequency, clarity, pitchClass, name, octave }
+      }
+
+      /**
+       * Add a detected note to the store.
+       */
+      add(frequency, clarity) {
+        const noteInfo = freqToNote(frequency);
+        const entry = {
+          timestamp: Date.now(),
+          frequency,
+          clarity,
+          ...noteInfo
+        };
+        // Prepend so newest is first (for display)
+        this.notes.unshift(entry);
+
+        // Cap total stored notes to prevent memory issues
+        // 3000 notes is plenty even for extended sessions
+        if (this.notes.length > 3000) {
+          this.notes.length = 3000;
+        }
+
+        return entry;
+      }
+
+      /**
+       * Get the pitch class histogram for a given time window.
+       * @param {number} windowSeconds - 0 means all time
+       * @returns {number[]} Array of 12 counts (C through B)
+       */
+      getHistogram(windowSeconds = 0) {
+        const histogram = new Array(12).fill(0);
+        const cutoff = windowSeconds > 0 ? Date.now() - (windowSeconds * 1000) : 0;
+
+        for (const note of this.notes) {
+          if (cutoff > 0 && note.timestamp < cutoff) break; // notes are newest-first
+          // Weight by clarity so confident detections count more
+          histogram[note.pitchClass] += note.clarity;
+        }
+
+        return histogram;
+      }
+
+      /**
+       * Get notes within the given time window for display.
+       */
+      getRecent(maxCount = 50) {
+        return this.notes.slice(0, maxCount);
+      }
+
+      clear() {
+        this.notes = [];
+      }
+
+      get length() {
+        return this.notes.length;
+      }
+    }
+
+    // =============================================
+    // UI Controller
+    // =============================================
+
+    class KeyFinderApp {
+      constructor() {
+        // State
+        this.isListening = false;
+        this.audioContext = null;
+        this.mediaStream = null;
+        this.currentDetector = null;
+        this.noteStore = new NoteStore();
+        this.animationFrameId = null;
+
+        // DOM refs
+        this.dom = {
+          statusDot: document.getElementById('statusDot'),
+          detectorSelect: document.getElementById('detectorSelect'),
+          windowSelect: document.getElementById('windowSelect'),
+          keyDisplay: document.getElementById('keyDisplay'),
+          keyValue: document.getElementById('keyValue'),
+          keyConfidence: document.getElementById('keyConfidence'),
+          pitchDistribution: document.getElementById('pitchDistribution'),
+          noteName: document.getElementById('noteName'),
+          noteOctave: document.getElementById('noteOctave'),
+          noteFreq: document.getElementById('noteFreq'),
+          noteConfidence: document.getElementById('noteConfidence'),
+          historyList: document.getElementById('historyList'),
+          clearHistory: document.getElementById('clearHistory'),
+          controlBtn: document.getElementById('controlBtn'),
+        };
+
+        this._initPitchBars();
+        this._bindEvents();
+
+        console.log('[KeyFinderApp] Initialized');
+      }
+
+      /**
+       * Create the 12 pitch class bar elements in the distribution display.
+       */
+      _initPitchBars() {
+        this.pitchBars = [];
+        for (let i = 0; i < 12; i++) {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'pitch-bar-wrapper';
+
+          const bar = document.createElement('div');
+          bar.className = 'pitch-bar';
+
+          const fill = document.createElement('div');
+          fill.className = 'pitch-bar-fill';
+          fill.style.height = '0%';
+          bar.appendChild(fill);
+
+          const label = document.createElement('div');
+          label.className = 'pitch-bar-label';
+          label.textContent = NOTE_NAMES[i].replace('#', '♯');
+
+          wrapper.appendChild(bar);
+          wrapper.appendChild(label);
+          this.dom.pitchDistribution.appendChild(wrapper);
+          this.pitchBars.push(fill);
+        }
+      }
+
+      _bindEvents() {
+        this.dom.controlBtn.addEventListener('click', () => this._toggleListening());
+        this.dom.clearHistory.addEventListener('click', () => this._clearAll());
+
+        // Changing the analysis window triggers a re-estimation immediately
+        this.dom.windowSelect.addEventListener('change', () => this._updateKeyEstimate());
+
+        // Changing detector requires a restart if currently listening
+        this.dom.detectorSelect.addEventListener('change', async () => {
+          if (this.isListening) {
+            await this._stopListening();
+            await this._startListening();
+          }
+        });
+      }
+
+      async _toggleListening() {
+        if (this.isListening) {
+          await this._stopListening();
+        } else {
+          await this._startListening();
+        }
+      }
+
+      async _startListening() {
+        try {
+          console.log('[KeyFinderApp] Requesting microphone access...');
+
+          // Create AudioContext (must happen in response to user gesture on mobile)
+          this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+          // Request mic access
+          this.mediaStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: false,  // We want raw audio, not processed
+              noiseSuppression: false,
+              autoGainControl: false,
+            },
+            video: false,
+          });
+          console.log(`[KeyFinderApp] Mic access granted. Sample rate: ${this.audioContext.sampleRate}`);
+
+          // Instantiate the selected detector
+          const detectorName = this.dom.detectorSelect.value;
+          const detectorFactory = DETECTOR_REGISTRY[detectorName];
+          if (!detectorFactory) {
+            throw new Error(`Unknown detector: ${detectorName}`);
+          }
+          this.currentDetector = detectorFactory();
+          await this.currentDetector.init(this.audioContext, this.mediaStream);
+
+          // Update UI state
+          this.isListening = true;
+          this.dom.controlBtn.textContent = 'STOP LISTENING';
+          this.dom.controlBtn.classList.remove('start');
+          this.dom.controlBtn.classList.add('stop');
+          this.dom.statusDot.classList.add('listening');
+          this.dom.keyDisplay.classList.add('active');
+
+          // Begin the detection loop
+          this._detectionLoop();
+
+          console.log('[KeyFinderApp] Listening started');
+
+        } catch (err) {
+          console.error('[KeyFinderApp] Failed to start listening:', err);
+          // Show user-friendly error
+          if (err.name === 'NotAllowedError') {
+            this.dom.keyConfidence.textContent = 'Mic access denied - check permissions';
+          } else if (err.name === 'NotFoundError') {
+            this.dom.keyConfidence.textContent = 'No microphone found';
+          } else {
+            this.dom.keyConfidence.textContent = `Error: ${err.message}`;
+          }
+          // Clean up any partial setup
+          await this._stopListening();
+        }
+      }
+
+      async _stopListening() {
+        console.log('[KeyFinderApp] Stopping...');
+
+        // Stop the detection loop
+        if (this.animationFrameId) {
+          cancelAnimationFrame(this.animationFrameId);
+          this.animationFrameId = null;
+        }
+
+        // Clean up detector
+        if (this.currentDetector) {
+          this.currentDetector.destroy();
+          this.currentDetector = null;
+        }
+
+        // Stop all mic tracks
+        if (this.mediaStream) {
+          this.mediaStream.getTracks().forEach(track => track.stop());
+          this.mediaStream = null;
+        }
+
+        // Close audio context
+        if (this.audioContext && this.audioContext.state !== 'closed') {
+          try {
+            await this.audioContext.close();
+          } catch (e) {
+            console.warn('[KeyFinderApp] Error closing AudioContext:', e);
+          }
+          this.audioContext = null;
+        }
+
+        // Update UI
+        this.isListening = false;
+        this.dom.controlBtn.textContent = 'START LISTENING';
+        this.dom.controlBtn.classList.remove('stop');
+        this.dom.controlBtn.classList.add('start');
+        this.dom.statusDot.classList.remove('listening');
+        this.dom.keyDisplay.classList.remove('active');
+
+        console.log('[KeyFinderApp] Stopped');
+      }
+
+      /**
+       * Main detection loop running via requestAnimationFrame.
+       * ~60 times/sec on most devices, which is more than enough for
+       * pitch detection at our buffer size.
+       */
+      _detectionLoop() {
+        if (!this.isListening || !this.currentDetector) return;
+
+        const result = this.currentDetector.getPitch();
+
+        if (result.frequency !== null) {
+          // We detected a valid pitch
+          const entry = this.noteStore.add(result.frequency, result.clarity);
+          this._updateCurrentNote(entry);
+          this._addHistoryItem(entry);
+        }
+
+        // Update key estimate and distribution on every frame
+        // (even when no new note, in case the window has changed)
+        this._updateKeyEstimate();
+        this._updatePitchDistribution();
+
+        this.animationFrameId = requestAnimationFrame(() => this._detectionLoop());
+      }
+
+      /**
+       * Update the "current note" display.
+       */
+      _updateCurrentNote(entry) {
+        const color = this._confidenceColor(entry.clarity);
+        this.dom.noteName.textContent = entry.name;
+        this.dom.noteName.style.color = color;
+        this.dom.noteOctave.textContent = entry.octave;
+        this.dom.noteFreq.textContent = `${entry.frequency.toFixed(1)} Hz`;
+        this.dom.noteConfidence.textContent = `${(entry.clarity * 100).toFixed(0)}%`;
+        this.dom.noteConfidence.style.color = color;
+      }
+
+      /**
+       * Add a new item to the top of the note history list.
+       */
+      _addHistoryItem(entry) {
+        const color = this._confidenceColor(entry.clarity);
+        const el = document.createElement('div');
+        el.className = 'history-item';
+
+        const time = new Date(entry.timestamp);
+        const timeStr = `${time.getMinutes().toString().padStart(2, '0')}:${time.getSeconds().toString().padStart(2, '0')}`;
+
+        el.innerHTML = `
+          <div class="history-note-pip" style="background: ${color}"></div>
+          <span class="history-note-name" style="color: ${color}">${entry.name}${entry.octave}</span>
+          <span class="history-note-freq">${entry.frequency.toFixed(1)} Hz</span>
+          <span class="history-note-time">${timeStr}</span>
+        `;
+
+        const list = this.dom.historyList;
+        list.insertBefore(el, list.firstChild);
+
+        // Cap visible history items to keep DOM light
+        while (list.children.length > 80) {
+          list.removeChild(list.lastChild);
+        }
+      }
+
+      /**
+       * Run key estimation and update the display.
+       */
+      _updateKeyEstimate() {
+        const windowSec = parseInt(this.dom.windowSelect.value, 10);
+        const histogram = this.noteStore.getHistogram(windowSec);
+        const result = estimateKey(histogram);
+
+        if (result.key) {
+          this.dom.keyValue.textContent = result.key;
+          this.dom.keyValue.classList.add('detected');
+          // Show correlation as a percentage (0-100)
+          const confPct = (result.correlation * 100).toFixed(0);
+          this.dom.keyConfidence.textContent = `correlation: ${confPct}%`;
+        } else {
+          this.dom.keyValue.textContent = '—';
+          this.dom.keyValue.classList.remove('detected');
+          this.dom.keyConfidence.textContent = this.isListening ? 'listening...' : 'waiting for input';
+        }
+      }
+
+      /**
+       * Update the 12-bar pitch class distribution visualization.
+       */
+      _updatePitchDistribution() {
+        const windowSec = parseInt(this.dom.windowSelect.value, 10);
+        const histogram = this.noteStore.getHistogram(windowSec);
+        const maxVal = Math.max(...histogram, 0.001); // avoid division by zero
+
+        for (let i = 0; i < 12; i++) {
+          const pct = (histogram[i] / maxVal) * 100;
+          this.pitchBars[i].style.height = `${pct}%`;
+        }
+      }
+
+      /**
+       * Map a clarity value (0-1) to a color for visual feedback.
+       * High clarity = cyan, medium = amber, low = rose.
+       */
+      _confidenceColor(clarity) {
+        if (clarity >= 0.95) return 'var(--confidence-high)';
+        if (clarity >= 0.88) return 'var(--confidence-mid)';
+        return 'var(--confidence-low)';
+      }
+
+      /**
+       * Clear all history and reset the display.
+       */
+      _clearAll() {
+        this.noteStore.clear();
+        this.dom.historyList.innerHTML = '';
+        this.dom.noteName.textContent = '—';
+        this.dom.noteOctave.textContent = '';
+        this.dom.noteFreq.textContent = '';
+        this.dom.noteConfidence.textContent = '—';
+        this.dom.noteConfidence.style.color = '';
+        this.dom.noteName.style.color = '';
+        this._updateKeyEstimate();
+        this._updatePitchDistribution();
+        console.log('[KeyFinderApp] History cleared');
+      }
+    }
+
+    // =============================================
+    // Boot
+    // =============================================
+    const app = new KeyFinderApp();
+
+  </script>
+</body>
+</html>
