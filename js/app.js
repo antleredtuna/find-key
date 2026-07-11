@@ -106,7 +106,12 @@ class KeyFinderApp {
       chromaMode: this.dom.chromaModeSelect.value,
       clarityThreshold: this.detector ? this.detector.clarityThreshold : 0.80,
       fftSize: this.detector ? this.detector.fftSize : 4096,
-      sampleRate: this.audioContext ? this.audioContext.sampleRate : null,
+      // Prefer the live context, but fall back to the detector's stored rate
+      // (set at init) so the value survives even if audio has been torn down
+      // or capture was started before listening began.
+      sampleRate: (this.audioContext && this.audioContext.sampleRate)
+      || (this.detector && this.detector.sampleRate)
+      || null,
       refA: this.coalescer.refA,
     };
   }
@@ -143,9 +148,9 @@ class KeyFinderApp {
     } catch (err) {
       console.error('[KeyFinderApp] Start failed:', err);
       const msg =
-        err.name === 'NotAllowedError' ? 'Mic access denied'
-        : err.name === 'NotFoundError' ? 'No mic found'
-        : `Error: ${err.message}`;
+      err.name === 'NotAllowedError' ? 'Mic access denied'
+      : err.name === 'NotFoundError' ? 'No mic found'
+      : `Error: ${err.message}`;
       this.dom.estimatedKey.textContent = msg;
       this.dom.estimatedKey.classList.add('empty');
       await this._stop();
@@ -285,7 +290,7 @@ class KeyFinderApp {
       mode,
       windowSec,
       current: this.coalescer.peekCurrent(now),
-      now,
+                               now,
     });
 
     const noteCount = this.coalescer.notes.length + (this.coalescer.peekCurrent(now) ? 1 : 0);
@@ -335,26 +340,52 @@ class KeyFinderApp {
   _toggleCapture() {
     if (!this.capture.active) {
       const label = (typeof prompt === 'function')
-        ? (prompt('Label for this capture (e.g. "Am - known"):', '') || '')
-        : '';
+      ? (prompt('Label for this capture (e.g. "Am - known"):', '') || '')
+      : '';
+      // Clear accumulated history so this capture cannot inherit notes from a
+      // prior session or from warm-up doodling before REC was pressed. Each
+      // capture starts from a clean slate and is fully self-contained.
+      this.coalescer.clear();
+      this.rawSamples = [];
       this.capture.start(label, this._settings());
       this.dom.captureBtn.textContent = 'REC';
       this.dom.captureBtn.classList.add('recording');
+      this._renderKeyAndHistogram();
     } else {
-      // Snapshot derived stages at stop time so the bundle is self-contained.
+      // The capture window IS the analysis window. Export only notes that fall
+      // within [startedAt, stoppedAt] — NOT the entire coalescer history, and
+      // NOT filtered by the live "Window" dropdown (that dropdown controls the
+      // on-screen display only). This is the fix for the stale-note bug where
+      // captures inherited every note from prior sessions.
       const now = Date.now();
-      const windowSec = parseInt(this.dom.windowSelect.value, 10) || 0;
+      const winStart = this.capture.startedAt;
+      const winEnd = now; // stoppedAt is set inside capture.stop(); use now as the bound
+
+      // A small tolerance absorbs the sub-frame slop between a note's committed
+      // timestamps and the capture start/stop instants.
+      const TOL = 250; // ms
+      const inWindow = (nt) =>
+      nt.endTime >= winStart - TOL && nt.startTime <= winEnd + TOL;
+
+      // Commit whatever is still sounding so the final note isn't lost, then
+      // gather the window's notes in chronological order.
+      this.coalescer.flush();
+      const windowNotes = this.coalescer.notes
+      .filter(inWindow)
+      .slice()
+      .reverse(); // coalescer stores newest-first; export chronological
+
+      // Build both chroma lenses over the capture window only (no extra time
+      // windowing — the capture already bounds the time span).
       const chromas = {};
       for (const m of CHROMA_MODES) {
-        chromas[m] = buildChroma(this.coalescer.notes, {
-          mode: m, windowSec, current: this.coalescer.peekCurrent(now), now,
-        });
+        chromas[m] = buildChroma(windowNotes, { mode: m, windowSec: 0, now });
       }
       const activeChroma = chromas[this.dom.chromaModeSelect.value];
       const keyTable = estimateKey(activeChroma).ranked;
 
       const bundle = this.capture.stop({
-        notes: [...this.coalescer.notes].reverse(), // chronological order
+        notes: windowNotes,
         chromas,
         keyTable,
       });
