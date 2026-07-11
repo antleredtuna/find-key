@@ -377,6 +377,59 @@
     .btn-clear:active { color: var(--accent-rose); background: var(--accent-rose-dim); }
   </style>
   <style>
+    /* Header right cluster (TUNE button + status dot) */
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .tune-btn {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tune-btn:active { transform: scale(0.96); }
+    .tune-btn.active {
+      color: var(--accent-cyan);
+      border-color: var(--accent-cyan);
+    }
+
+    /* Live tuning readout in the cents note row */
+    .tuning-readout {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-left: 10px;
+      padding: 2px 7px;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      cursor: pointer;
+      user-select: none;
+      transition: color 0.2s, border-color 0.2s, background 0.2s;
+      white-space: nowrap;
+    }
+    .tuning-readout:empty { display: none; }
+    /* When correction is ACTIVE (applied to key analysis) */
+    .tuning-readout.applied {
+      color: var(--accent-cyan);
+      border-color: var(--accent-cyan);
+      background: var(--accent-cyan-dim);
+    }
+    /* When measured but NOT applied (display only) */
+    .tuning-readout.measured {
+      color: var(--text-secondary);
+      border-color: var(--border-subtle);
+    }
+
     /* Additions for modular rewrite: capture button recording state */
     .btn-capture {
       width: 56px;
@@ -405,7 +458,10 @@
     <!-- Header -->
     <div class="header">
       <h1>KEY FINDER</h1>
+      <div class="header-right">
+        <button class="tune-btn" id="tuneBtn" title="Tuning / calibrate screen">TUNE</button>
       <div class="status-dot" id="statusDot"></div>
+    </div>
     </div>
 
     <!-- Cents Deviation / Current Note -->
@@ -414,6 +470,7 @@
         <span class="cents-note-name" id="centsNoteName">&mdash;</span>
         <span class="cents-note-octave" id="centsNoteOctave"></span>
         <span class="cents-note-freq" id="centsNoteFreq"></span>
+        <span class="tuning-readout" id="tuningReadout" title="Estimated tuning of the incoming source. Tap to apply/ignore in key analysis."></span>
       </div>
       <div class="cents-scale">
         <div class="cents-labels">

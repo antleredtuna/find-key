@@ -19,6 +19,12 @@ import {
   CHROMA_MODES,
 } from './pipeline.js';
 import { PitchGraphRenderer, initHistogramBars } from './render.js';
+import { estimateTuningOffset } from './tuning.js';
+
+// How many recent accepted frames to keep for the rolling tuning estimate.
+const TUNING_FRAME_WINDOW = 300;
+// Re-estimate tuning at most this often (ms) to avoid per-frame churn.
+const TUNING_REFRESH_MS = 500;
 
 // Minimum committed notes before we show a key estimate. With a genuinely
 // distinct pitch class set, K-S can discriminate earlier, but showing a key
@@ -48,6 +54,16 @@ class KeyFinderApp {
     // Timing for hop-rate decoupling and silence detection.
     this._lastHopAt = 0;
     this._silenceStartedAt = null;
+
+    // --- Tuning estimation state ---
+    // Rolling buffer of recent accepted frames ({frequency}) for the live
+    // tuning-offset estimate. Kept small and separate from capture.
+    this._tuningFrames = [];
+    this._lastTuningAt = 0;
+    // Latest estimate: { offsetCents, correctedRefA, n, confident, spread }.
+    this._tuning = { offsetCents: 0, correctedRefA: 440, n: 0, confident: false, spread: 0 };
+    // Whether the measured offset is APPLIED to key analysis (user toggle).
+    this._applyTuning = false;
 
     this._cacheDom();
     this.histo = initHistogramBars(this.dom.histogramBars);
@@ -84,6 +100,8 @@ class KeyFinderApp {
       graphContainer: $('graphContainer'),
       pitchCanvas: $('pitchCanvas'),
       graphLabels: $('graphLabels'),
+      tuningReadout: $('tuningReadout'),
+      tuneBtn: $('tuneBtn'),
     };
   }
 
@@ -94,6 +112,79 @@ class KeyFinderApp {
     // Re-derive key/histogram immediately when a lens changes, even while paused.
     this.dom.windowSelect.addEventListener('change', () => this._renderKeyAndHistogram());
     this.dom.chromaModeSelect.addEventListener('change', () => this._renderKeyAndHistogram());
+    // Tap the tuning readout to apply/ignore the measured offset in key analysis.
+    this.dom.tuningReadout.addEventListener('click', () => this._toggleApplyTuning());
+    // TUNE button: calibrate view (wired in the next build step).
+    this.dom.tuneBtn.addEventListener('click', () => this._onTuneButton());
+  }
+
+  // -------------------------------------------------------------------------
+  // Tuning: rolling estimate, readout, and apply-toggle
+  // -------------------------------------------------------------------------
+
+  /** The reference A the ANALYSIS should use right now (440 unless applied). */
+  get _activeRefA() {
+    return this._applyTuning ? this._tuning.correctedRefA : 440;
+  }
+
+  /** Push an accepted frame into the rolling tuning buffer. */
+  _pushTuningFrame(frequency) {
+    this._tuningFrames.push({ frequency, gate: 'accepted' });
+    if (this._tuningFrames.length > TUNING_FRAME_WINDOW) {
+      this._tuningFrames.splice(0, this._tuningFrames.length - TUNING_FRAME_WINDOW);
+    }
+  }
+
+  /** Recompute the tuning estimate (throttled) and refresh the readout. */
+  _updateTuning(now) {
+    if (now - this._lastTuningAt < TUNING_REFRESH_MS) return;
+    this._lastTuningAt = now;
+
+    // Always measure against 440 — the offset is defined relative to concert
+    // pitch. Applying it is a separate choice.
+    this._tuning = estimateTuningOffset(this._tuningFrames, { refA: 440, minFrames: 30 });
+
+    // When correction is applied, keep the coalescer's reference in sync so new
+    // notes are binned under the corrected reference.
+    if (this._applyTuning) {
+      this.coalescer.refA = this._tuning.correctedRefA;
+    }
+
+    this._renderTuningReadout();
+  }
+
+  _renderTuningReadout() {
+    const el = this.dom.tuningReadout;
+    const t = this._tuning;
+    if (!t || t.n === 0 || !this.isListening) {
+      el.textContent = '';
+      el.className = 'tuning-readout';
+      return;
+    }
+    const sign = t.offsetCents >= 0 ? '+' : '';
+    const cents = `${sign}${t.offsetCents.toFixed(0)}\u00A2`;
+    const aRef = t.correctedRefA.toFixed(0);
+    // Show a "~" while not yet confident (few samples).
+    const prefix = t.confident ? '' : '~';
+    el.textContent = `${prefix}${cents} \u00B7 A\u2248${aRef}`;
+    el.className = 'tuning-readout ' + (this._applyTuning ? 'applied' : 'measured');
+  }
+
+  _toggleApplyTuning() {
+    // Only meaningful once we have an estimate.
+    if (!this._tuning || this._tuning.n === 0) return;
+    this._applyTuning = !this._applyTuning;
+    // Set the analysis reference for subsequent notes.
+    this.coalescer.refA = this._activeRefA;
+    this._renderTuningReadout();
+    this._renderKeyAndHistogram();
+    console.log(`[KeyFinderApp] tuning correction ${this._applyTuning ? 'APPLIED' : 'off'} (refA=${this.coalescer.refA.toFixed(2)})`);
+  }
+
+  _onTuneButton() {
+    // Calibrate view is built in the next step; placeholder keeps the button
+    // inert-but-present so the layout and wiring are testable now.
+    console.log('[KeyFinderApp] TUNE pressed (calibrate view pending next build step)');
   }
 
   // -------------------------------------------------------------------------
@@ -110,8 +201,8 @@ class KeyFinderApp {
       // (set at init) so the value survives even if audio has been torn down
       // or capture was started before listening began.
       sampleRate: (this.audioContext && this.audioContext.sampleRate)
-      || (this.detector && this.detector.sampleRate)
-      || null,
+        || (this.detector && this.detector.sampleRate)
+        || null,
       refA: this.coalescer.refA,
     };
   }
@@ -148,9 +239,9 @@ class KeyFinderApp {
     } catch (err) {
       console.error('[KeyFinderApp] Start failed:', err);
       const msg =
-      err.name === 'NotAllowedError' ? 'Mic access denied'
-      : err.name === 'NotFoundError' ? 'No mic found'
-      : `Error: ${err.message}`;
+        err.name === 'NotAllowedError' ? 'Mic access denied'
+        : err.name === 'NotFoundError' ? 'No mic found'
+        : `Error: ${err.message}`;
       this.dom.estimatedKey.textContent = msg;
       this.dom.estimatedKey.classList.add('empty');
       await this._stop();
@@ -180,6 +271,8 @@ class KeyFinderApp {
     // If a capture was running, finalize it so nothing is left dangling.
     if (this.capture.active) this._toggleCapture();
 
+    // Freeze the tuning readout (it only shows a live estimate while listening).
+    this._renderTuningReadout();
     this._renderKeyAndHistogram();
   }
 
@@ -238,6 +331,9 @@ class KeyFinderApp {
       // Stage 3: coalesce
       this.coalescer.addFrame(now, raw.frequency, raw.clarity);
 
+      // Feed the rolling tuning estimate (always measured vs 440).
+      this._pushTuningFrame(raw.frequency);
+
       // Cents / current-note readout
       const info = freqToNote(raw.frequency, this.coalescer.refA);
       info.frequency = raw.frequency;
@@ -255,6 +351,9 @@ class KeyFinderApp {
 
     // Capture (bounded) records every hop's frame while active.
     this.capture.recordFrame(frame);
+
+    // Rolling tuning estimate + readout (throttled internally).
+    this._updateTuning(now);
 
     // Stage 4 + 5: chroma + key, refreshed each hop.
     this._renderKeyAndHistogram();
@@ -290,7 +389,7 @@ class KeyFinderApp {
       mode,
       windowSec,
       current: this.coalescer.peekCurrent(now),
-                               now,
+      now,
     });
 
     const noteCount = this.coalescer.notes.length + (this.coalescer.peekCurrent(now) ? 1 : 0);
@@ -340,8 +439,8 @@ class KeyFinderApp {
   _toggleCapture() {
     if (!this.capture.active) {
       const label = (typeof prompt === 'function')
-      ? (prompt('Label for this capture (e.g. "Am - known"):', '') || '')
-      : '';
+        ? (prompt('Label for this capture (e.g. "Am - known"):', '') || '')
+        : '';
       // Clear accumulated history so this capture cannot inherit notes from a
       // prior session or from warm-up doodling before REC was pressed. Each
       // capture starts from a clean slate and is fully self-contained.
@@ -365,15 +464,15 @@ class KeyFinderApp {
       // timestamps and the capture start/stop instants.
       const TOL = 250; // ms
       const inWindow = (nt) =>
-      nt.endTime >= winStart - TOL && nt.startTime <= winEnd + TOL;
+        nt.endTime >= winStart - TOL && nt.startTime <= winEnd + TOL;
 
       // Commit whatever is still sounding so the final note isn't lost, then
       // gather the window's notes in chronological order.
       this.coalescer.flush();
       const windowNotes = this.coalescer.notes
-      .filter(inWindow)
-      .slice()
-      .reverse(); // coalescer stores newest-first; export chronological
+        .filter(inWindow)
+        .slice()
+        .reverse(); // coalescer stores newest-first; export chronological
 
       // Build both chroma lenses over the capture window only (no extra time
       // windowing — the capture already bounds the time span).
@@ -419,12 +518,18 @@ class KeyFinderApp {
   _clearAll() {
     this.coalescer.clear();
     this.rawSamples = [];
+    // Reset tuning estimate and any applied correction back to concert pitch.
+    this._tuningFrames = [];
+    this._tuning = { offsetCents: 0, correctedRefA: 440, n: 0, confident: false, spread: 0 };
+    this._applyTuning = false;
+    this.coalescer.refA = 440;
     this.dom.centsNoteName.textContent = '\u2014';
     this.dom.centsNoteOctave.textContent = '';
     this.dom.centsNoteFreq.textContent = '';
     this.dom.centsCurrent.textContent = '0\u00A2';
     this.dom.centsDot.style.left = '50%';
     this.dom.centsDot.classList.remove('flat', 'sharp');
+    this._renderTuningReadout();
     this._renderKeyAndHistogram();
     this.graph.render([], [], null);
     console.log('[KeyFinderApp] Cleared');
