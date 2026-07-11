@@ -1,543 +1,636 @@
 <!-- findKey.html - Key Finder Web App (modular rewrite) -->
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Key Finder</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <style>
-    /* ========================================
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=no"
+    />
+    <title>Key Finder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* ========================================
        CSS Variables & Reset
        ======================================== */
-    :root {
-      --bg-primary: #0b0b10;
-      --bg-secondary: #111118;
-      --bg-tertiary: #1a1a24;
-      --bg-card: #14141c;
-      --bg-band-natural: #1a1a26;
-      --bg-band-sharp: #131320;
-      --text-primary: #e8e6f0;
-      --text-secondary: #8a879c;
-      --text-muted: #4a4862;
-      --accent-orange: #f0962a;
-      --accent-orange-dim: rgba(240, 150, 42, 0.15);
-      --accent-cyan: #00d4b8;
-      --accent-cyan-dim: rgba(0, 212, 184, 0.12);
-      --accent-rose: #ff5c8a;
-      --accent-rose-dim: rgba(255, 92, 138, 0.15);
-      --note-fill: #e8951f;
-      --note-fill-dim: rgba(232, 149, 31, 0.6);
-      --pitch-line: #ffffff;
-      --border-subtle: rgba(255, 255, 255, 0.06);
-      --border-grid: rgba(255, 255, 255, 0.04);
-      --radius-sm: 6px;
-      --radius-md: 10px;
-      --font-mono: 'JetBrains Mono', monospace;
-      --font-sans: 'DM Sans', sans-serif;
-    }
+      :root {
+        --bg-primary: #0b0b10;
+        --bg-secondary: #111118;
+        --bg-tertiary: #1a1a24;
+        --bg-card: #14141c;
+        --bg-band-natural: #1a1a26;
+        --bg-band-sharp: #131320;
+        --text-primary: #e8e6f0;
+        --text-secondary: #8a879c;
+        --text-muted: #4a4862;
+        --accent-orange: #f0962a;
+        --accent-orange-dim: rgba(240, 150, 42, 0.15);
+        --accent-cyan: #00d4b8;
+        --accent-cyan-dim: rgba(0, 212, 184, 0.12);
+        --accent-rose: #ff5c8a;
+        --accent-rose-dim: rgba(255, 92, 138, 0.15);
+        --note-fill: #e8951f;
+        --note-fill-dim: rgba(232, 149, 31, 0.6);
+        --pitch-line: #ffffff;
+        --border-subtle: rgba(255, 255, 255, 0.06);
+        --border-grid: rgba(255, 255, 255, 0.04);
+        --radius-sm: 6px;
+        --radius-md: 10px;
+        --font-mono: "JetBrains Mono", monospace;
+        --font-sans: "DM Sans", sans-serif;
+      }
 
-    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { height: 100%; overflow: hidden; }
-    body {
-      font-family: var(--font-sans);
-      background: var(--bg-primary);
-      color: var(--text-primary);
-      -webkit-font-smoothing: antialiased;
-      touch-action: manipulation;
-    }
+      *,
+      *::before,
+      *::after {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        overflow: hidden;
+      }
+      body {
+        font-family: var(--font-sans);
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        -webkit-font-smoothing: antialiased;
+        touch-action: manipulation;
+      }
 
-    /* ========================================
+      /* ========================================
        App Layout
        ======================================== */
-    #app {
-      display: flex;
-      flex-direction: column;
-      height: 100dvh;
-      max-width: 520px;
-      margin: 0 auto;
-      gap: 0;
-    }
+      #app {
+        display: flex;
+        flex-direction: column;
+        height: 100dvh;
+        max-width: 520px;
+        margin: 0 auto;
+        gap: 0;
+      }
 
-    /* ========================================
+      /* ========================================
        Header
        ======================================== */
-    .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 10px 14px 6px;
-      flex-shrink: 0;
-    }
-    .header h1 {
-      font-family: var(--font-mono);
-      font-size: 15px;
-      font-weight: 700;
-      letter-spacing: -0.5px;
-      background: linear-gradient(135deg, var(--accent-cyan), #7c6fff);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    .status-dot {
-      width: 8px; height: 8px; border-radius: 50%;
-      background: var(--text-muted);
-      transition: background 0.3s ease;
-    }
-    .status-dot.listening {
-      background: var(--accent-cyan);
-      box-shadow: 0 0 8px var(--accent-cyan);
-      animation: pulse 1.5s ease-in-out infinite;
-    }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 14px 6px;
+        flex-shrink: 0;
+      }
+      .header h1 {
+        font-family: var(--font-mono);
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+        background: linear-gradient(135deg, var(--accent-cyan), #7c6fff);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--text-muted);
+        transition: background 0.3s ease;
+      }
+      .status-dot.listening {
+        background: var(--accent-cyan);
+        box-shadow: 0 0 8px var(--accent-cyan);
+        animation: pulse 1.5s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.4;
+        }
+      }
 
-    /* ========================================
+      /* ========================================
        Cents Deviation / Current Note Bar
        ======================================== */
-    .cents-bar {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 6px 14px 8px;
-      flex-shrink: 0;
-      background: var(--bg-secondary);
-      border-bottom: 1px solid var(--border-subtle);
-    }
-    .cents-note-row {
-      display: flex;
-      align-items: baseline;
-      justify-content: center;
-      gap: 8px;
-      margin-bottom: 4px;
-    }
-    .cents-note-name {
-      font-family: var(--font-mono);
-      font-size: 22px;
-      font-weight: 700;
-      color: var(--text-primary);
-      min-width: 40px;
-      text-align: center;
-    }
-    .cents-note-octave {
-      font-family: var(--font-mono);
-      font-size: 13px;
-      color: var(--text-secondary);
-    }
-    .cents-note-freq {
-      font-family: var(--font-mono);
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-    .cents-scale {
-      position: relative;
-      width: 100%;
-      max-width: 300px;
-    }
-    .cents-labels {
-      display: flex;
-      justify-content: space-between;
-      font-family: var(--font-mono);
-      font-size: 9px;
-      color: var(--text-muted);
-      margin-bottom: 2px;
-    }
-    .cents-track {
-      position: relative;
-      height: 4px;
-      background: var(--bg-tertiary);
-      border-radius: 2px;
-      overflow: visible;
-    }
-    .cents-center-line {
-      position: absolute;
-      left: 50%; top: -2px;
-      width: 1px; height: 8px;
-      background: var(--text-muted);
-    }
-    .cents-dot {
-      position: absolute;
-      top: 50%;
-      width: 10px; height: 10px;
-      border-radius: 50%;
-      background: var(--accent-orange);
-      transform: translate(-50%, -50%);
-      left: 50%;
-      transition: left 0.08s ease-out, background 0.15s;
-      box-shadow: 0 0 6px rgba(240, 150, 42, 0.5);
-    }
-    .cents-dot.flat { background: var(--accent-rose); box-shadow: 0 0 6px rgba(255,92,138,0.5); }
-    .cents-dot.sharp { background: var(--accent-cyan); box-shadow: 0 0 6px rgba(0,212,184,0.5); }
+      .cents-bar {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 6px 14px 8px;
+        flex-shrink: 0;
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border-subtle);
+      }
+      .cents-note-row {
+        display: flex;
+        align-items: baseline;
+        justify-content: center;
+        gap: 8px;
+        margin-bottom: 4px;
+      }
+      .cents-note-name {
+        font-family: var(--font-mono);
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--text-primary);
+        min-width: 40px;
+        text-align: center;
+      }
+      .cents-note-octave {
+        font-family: var(--font-mono);
+        font-size: 13px;
+        color: var(--text-secondary);
+      }
+      .cents-note-freq {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--text-muted);
+      }
+      .cents-scale {
+        position: relative;
+        width: 100%;
+        max-width: 300px;
+      }
+      .cents-labels {
+        display: flex;
+        justify-content: space-between;
+        font-family: var(--font-mono);
+        font-size: 9px;
+        color: var(--text-muted);
+        margin-bottom: 2px;
+      }
+      .cents-track {
+        position: relative;
+        height: 4px;
+        background: var(--bg-tertiary);
+        border-radius: 2px;
+        overflow: visible;
+      }
+      .cents-center-line {
+        position: absolute;
+        left: 50%;
+        top: -2px;
+        width: 1px;
+        height: 8px;
+        background: var(--text-muted);
+      }
+      .cents-dot {
+        position: absolute;
+        top: 50%;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--accent-orange);
+        transform: translate(-50%, -50%);
+        left: 50%;
+        transition:
+          left 0.08s ease-out,
+          background 0.15s;
+        box-shadow: 0 0 6px rgba(240, 150, 42, 0.5);
+      }
+      .cents-dot.flat {
+        background: var(--accent-rose);
+        box-shadow: 0 0 6px rgba(255, 92, 138, 0.5);
+      }
+      .cents-dot.sharp {
+        background: var(--accent-cyan);
+        box-shadow: 0 0 6px rgba(0, 212, 184, 0.5);
+      }
 
-    /* ========================================
+      /* ========================================
        Pitch Graph (Piano Roll)
        ======================================== */
-    .pitch-graph-container {
-      flex: 1;
-      min-height: 0;
-      position: relative;
-      overflow: hidden;
-      border-bottom: 1px solid var(--border-subtle);
-    }
-    .pitch-graph-labels {
-      position: absolute;
-      left: 0; top: 0; bottom: 0;
-      width: 36px;
-      z-index: 2;
-      pointer-events: none;
-      background: linear-gradient(to right, var(--bg-primary) 70%, transparent);
-    }
-    .pitch-label {
-      position: absolute;
-      left: 4px;
-      font-family: var(--font-mono);
-      font-size: 9px;
-      font-weight: 500;
-      color: var(--text-muted);
-      transform: translateY(-50%);
-      pointer-events: none;
-    }
-    .pitch-label.natural { color: var(--text-secondary); font-weight: 600; }
-    #pitchCanvas {
-      display: block;
-      width: 100%;
-      height: 100%;
-    }
-    .playhead {
-      position: absolute;
-      right: 60px;
-      top: 0; bottom: 0;
-      width: 1px;
-      background: rgba(255,255,255,0.15);
-      z-index: 1;
-      pointer-events: none;
-    }
+      .pitch-graph-container {
+        flex: 1;
+        min-height: 0;
+        position: relative;
+        overflow: hidden;
+        border-bottom: 1px solid var(--border-subtle);
+      }
+      .pitch-graph-labels {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 36px;
+        z-index: 2;
+        pointer-events: none;
+        background: linear-gradient(
+          to right,
+          var(--bg-primary) 70%,
+          transparent
+        );
+      }
+      .pitch-label {
+        position: absolute;
+        left: 4px;
+        font-family: var(--font-mono);
+        font-size: 9px;
+        font-weight: 500;
+        color: var(--text-muted);
+        transform: translateY(-50%);
+        pointer-events: none;
+      }
+      .pitch-label.natural {
+        color: var(--text-secondary);
+        font-weight: 600;
+      }
+      #pitchCanvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      .playhead {
+        position: absolute;
+        right: 60px;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        background: rgba(255, 255, 255, 0.15);
+        z-index: 1;
+        pointer-events: none;
+      }
 
-    /* ========================================
+      /* ========================================
        Controls Row
        ======================================== */
-    .controls-row {
-      display: flex;
-      gap: 6px;
-      padding: 8px 10px;
-      flex-shrink: 0;
-      background: var(--bg-secondary);
-      border-bottom: 1px solid var(--border-subtle);
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-    }
-    .controls-row::-webkit-scrollbar { display: none; }
-    .ctrl-group {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      min-width: 0;
-    }
-    .ctrl-group label {
-      font-size: 8px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-      color: var(--text-muted);
-      white-space: nowrap;
-      padding-left: 2px;
-    }
-    .ctrl-group select {
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-sm);
-      color: var(--text-primary);
-      font-family: var(--font-mono);
-      font-size: 11px;
-      padding: 5px 20px 5px 6px;
-      appearance: none; -webkit-appearance: none;
-      cursor: pointer;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%238a879c' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 6px center;
-      white-space: nowrap;
-    }
-    .ctrl-group select:focus {
-      outline: none;
-      border-color: var(--accent-cyan);
-    }
+      .controls-row {
+        display: flex;
+        gap: 6px;
+        padding: 8px 10px;
+        flex-shrink: 0;
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border-subtle);
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      .controls-row::-webkit-scrollbar {
+        display: none;
+      }
+      .ctrl-group {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+      .ctrl-group label {
+        font-size: 8px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        color: var(--text-muted);
+        white-space: nowrap;
+        padding-left: 2px;
+      }
+      .ctrl-group select {
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-sm);
+        color: var(--text-primary);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        padding: 5px 20px 5px 6px;
+        appearance: none;
+        -webkit-appearance: none;
+        cursor: pointer;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%238a879c' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 6px center;
+        white-space: nowrap;
+      }
+      .ctrl-group select:focus {
+        outline: none;
+        border-color: var(--accent-cyan);
+      }
 
-    /* ========================================
+      /* ========================================
        Histogram + Key Display
        ======================================== */
-    .histogram-section {
-      flex-shrink: 0;
-      padding: 8px 14px 6px;
-      background: var(--bg-secondary);
-    }
-    .histogram-header {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      margin-bottom: 6px;
-    }
-    .estimated-key {
-      font-family: var(--font-mono);
-      font-size: 16px;
-      font-weight: 700;
-      color: var(--accent-cyan);
-      transition: color 0.3s;
-    }
-    .estimated-key.empty { color: var(--text-muted); font-size: 13px; }
-    .key-correlation {
-      font-family: var(--font-mono);
-      font-size: 10px;
-      color: var(--text-muted);
-    }
-    .histogram-bars {
-      display: flex;
-      gap: 3px;
-      align-items: flex-end;
-      height: 44px;
-    }
-    .histo-col {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 2px;
-      height: 100%;
-    }
-    .histo-bar {
-      width: 100%;
-      flex: 1;
-      border-radius: 2px 2px 0 0;
-      background: var(--bg-tertiary);
-      position: relative;
-      overflow: hidden;
-    }
-    .histo-fill {
-      position: absolute;
-      bottom: 0; left: 0; right: 0;
-      border-radius: 2px 2px 0 0;
-      transition: height 0.15s ease, background 0.3s;
-      background: var(--text-muted);
-    }
-    .histo-fill.in-key { background: var(--accent-cyan); opacity: 0.85; }
-    .histo-fill.out-key { background: var(--text-muted); opacity: 0.4; }
-    .histo-label {
-      font-family: var(--font-mono);
-      font-size: 8px;
-      color: var(--text-muted);
-      transition: color 0.3s;
-    }
-    .histo-label.in-key { color: var(--accent-cyan); font-weight: 600; }
+      .histogram-section {
+        flex-shrink: 0;
+        padding: 8px 14px 6px;
+        background: var(--bg-secondary);
+      }
+      .histogram-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        margin-bottom: 6px;
+      }
+      .estimated-key {
+        font-family: var(--font-mono);
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--accent-cyan);
+        transition: color 0.3s;
+      }
+      .estimated-key.empty {
+        color: var(--text-muted);
+        font-size: 13px;
+      }
+      .key-correlation {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        color: var(--text-muted);
+      }
+      .histogram-bars {
+        display: flex;
+        gap: 3px;
+        align-items: flex-end;
+        height: 44px;
+      }
+      .histo-col {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        height: 100%;
+      }
+      .histo-bar {
+        width: 100%;
+        flex: 1;
+        border-radius: 2px 2px 0 0;
+        background: var(--bg-tertiary);
+        position: relative;
+        overflow: hidden;
+      }
+      .histo-fill {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        border-radius: 2px 2px 0 0;
+        transition:
+          height 0.15s ease,
+          background 0.3s;
+        background: var(--text-muted);
+      }
+      .histo-fill.in-key {
+        background: var(--accent-cyan);
+        opacity: 0.85;
+      }
+      .histo-fill.out-key {
+        background: var(--text-muted);
+        opacity: 0.4;
+      }
+      .histo-label {
+        font-family: var(--font-mono);
+        font-size: 8px;
+        color: var(--text-muted);
+        transition: color 0.3s;
+      }
+      .histo-label.in-key {
+        color: var(--accent-cyan);
+        font-weight: 600;
+      }
 
-    /* ========================================
+      /* ========================================
        Bottom Button Row
        ======================================== */
-    .bottom-row {
-      display: flex;
-      gap: 8px;
-      padding: 8px 14px;
-      padding-bottom: max(14px, env(safe-area-inset-bottom));
-      flex-shrink: 0;
-      background: var(--bg-secondary);
-    }
-    .control-btn {
-      flex: 1;
-      padding: 14px;
-      border: none;
-      border-radius: var(--radius-md);
-      font-family: var(--font-mono);
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: 0.5px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-    .control-btn.start {
-      background: linear-gradient(135deg, var(--accent-cyan), #00b3a6);
-      color: var(--bg-primary);
-    }
-    .control-btn.stop {
-      background: var(--bg-tertiary);
-      color: var(--accent-rose);
-      border: 1px solid rgba(255,92,138,0.2);
-    }
-    .control-btn:active { transform: scale(0.97); }
-    .btn-clear {
-      width: 48px;
-      padding: 14px 0;
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-md);
-      background: var(--bg-tertiary);
-      color: var(--text-muted);
-      font-family: var(--font-mono);
-      font-size: 11px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .btn-clear:active { color: var(--accent-rose); background: var(--accent-rose-dim); }
-  </style>
-  <style>
-    /* Header right cluster (TUNE button + status dot) */
-    .header-right {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .tune-btn {
-      font-family: var(--font-mono);
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.5px;
-      color: var(--text-secondary);
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-sm);
-      padding: 4px 10px;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .tune-btn:active { transform: scale(0.96); }
-    .tune-btn.active {
-      color: var(--accent-cyan);
-      border-color: var(--accent-cyan);
-    }
+      .bottom-row {
+        display: flex;
+        gap: 8px;
+        padding: 8px 14px;
+        padding-bottom: max(14px, env(safe-area-inset-bottom));
+        flex-shrink: 0;
+        background: var(--bg-secondary);
+      }
+      .control-btn {
+        flex: 1;
+        padding: 14px;
+        border: none;
+        border-radius: var(--radius-md);
+        font-family: var(--font-mono);
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      .control-btn.start {
+        background: linear-gradient(135deg, var(--accent-cyan), #00b3a6);
+        color: var(--bg-primary);
+      }
+      .control-btn.stop {
+        background: var(--bg-tertiary);
+        color: var(--accent-rose);
+        border: 1px solid rgba(255, 92, 138, 0.2);
+      }
+      .control-btn:active {
+        transform: scale(0.97);
+      }
+      .btn-clear {
+        width: 48px;
+        padding: 14px 0;
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        background: var(--bg-tertiary);
+        color: var(--text-muted);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .btn-clear:active {
+        color: var(--accent-rose);
+        background: var(--accent-rose-dim);
+      }
+    </style>
+    <style>
+      /* Header right cluster (TUNE button + status dot) */
+      .header-right {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .tune-btn {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        color: var(--text-secondary);
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-sm);
+        padding: 4px 10px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .tune-btn:active {
+        transform: scale(0.96);
+      }
+      .tune-btn.active {
+        color: var(--accent-cyan);
+        border-color: var(--accent-cyan);
+      }
 
-    /* Live tuning readout in the cents note row */
-    .tuning-readout {
-      font-family: var(--font-mono);
-      font-size: 11px;
-      font-weight: 500;
-      color: var(--text-muted);
-      margin-left: 10px;
-      padding: 2px 7px;
-      border-radius: var(--radius-sm);
-      border: 1px solid transparent;
-      cursor: pointer;
-      user-select: none;
-      transition: color 0.2s, border-color 0.2s, background 0.2s;
-      white-space: nowrap;
-    }
-    .tuning-readout:empty { display: none; }
-    /* When correction is ACTIVE (applied to key analysis) */
-    .tuning-readout.applied {
-      color: var(--accent-cyan);
-      border-color: var(--accent-cyan);
-      background: var(--accent-cyan-dim);
-    }
-    /* When measured but NOT applied (display only) */
-    .tuning-readout.measured {
-      color: var(--text-secondary);
-      border-color: var(--border-subtle);
-    }
+      /* Live tuning readout in the cents note row */
+      .tuning-readout {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--text-muted);
+        margin-left: 10px;
+        padding: 2px 7px;
+        border-radius: var(--radius-sm);
+        border: 1px solid transparent;
+        cursor: pointer;
+        user-select: none;
+        transition:
+          color 0.2s,
+          border-color 0.2s,
+          background 0.2s;
+        white-space: nowrap;
+      }
+      .tuning-readout:empty {
+        display: none;
+      }
+      /* When correction is ACTIVE (applied to key analysis) */
+      .tuning-readout.applied {
+        color: var(--accent-cyan);
+        border-color: var(--accent-cyan);
+        background: var(--accent-cyan-dim);
+      }
+      /* When measured but NOT applied (display only) */
+      .tuning-readout.measured {
+        color: var(--text-secondary);
+        border-color: var(--border-subtle);
+      }
 
-    /* Additions for modular rewrite: capture button recording state */
-    .btn-capture {
-      width: 56px;
-      padding: 14px 0;
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-md);
-      background: var(--bg-tertiary);
-      color: var(--text-secondary);
-      font-family: var(--font-mono);
-      font-size: 11px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .btn-capture:active { transform: scale(0.97); }
-    .btn-capture.recording {
-      color: var(--accent-rose);
-      background: var(--accent-rose-dim);
-      border-color: rgba(255,92,138,0.4);
-      animation: pulse 1.2s ease-in-out infinite;
-    }
-  </style>
-</head>
-<body>
-  <div id="app">
-    <!-- Header -->
-    <div class="header">
-      <h1>KEY FINDER</h1>
-      <div class="header-right">
-        <button class="tune-btn" id="tuneBtn" title="Tuning / calibrate screen">TUNE</button>
-      <div class="status-dot" id="statusDot"></div>
-    </div>
-    </div>
-
-    <!-- Cents Deviation / Current Note -->
-    <div class="cents-bar">
-      <div class="cents-note-row">
-        <span class="cents-note-name" id="centsNoteName">&mdash;</span>
-        <span class="cents-note-octave" id="centsNoteOctave"></span>
-        <span class="cents-note-freq" id="centsNoteFreq"></span>
-        <span class="tuning-readout" id="tuningReadout" title="Estimated tuning of the incoming source. Tap to apply/ignore in key analysis."></span>
-      </div>
-      <div class="cents-scale">
-        <div class="cents-labels">
-          <span>-50&cent;</span>
-          <span id="centsCurrent">0&cent;</span>
-          <span>+50&cent;</span>
+      /* Additions for modular rewrite: capture button recording state */
+      .btn-capture {
+        width: 56px;
+        padding: 14px 0;
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        background: var(--bg-tertiary);
+        color: var(--text-secondary);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .btn-capture:active {
+        transform: scale(0.97);
+      }
+      .btn-capture.recording {
+        color: var(--accent-rose);
+        background: var(--accent-rose-dim);
+        border-color: rgba(255, 92, 138, 0.4);
+        animation: pulse 1.2s ease-in-out infinite;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <!-- Header -->
+      <div class="header">
+        <!-- Modify your existing header -->
+        <h1>
+          KEY FINDER
+          <span style="font-size: 10px; color: var(--text-muted)">v1.1.3</span>
+        </h1>
+        <div class="header-right">
+          <button
+            class="tune-btn"
+            id="tuneBtn"
+            title="Tuning / calibrate screen"
+          >
+            TUNE
+          </button>
+          <div class="status-dot" id="statusDot"></div>
         </div>
-        <div class="cents-track">
-          <div class="cents-center-line"></div>
-          <div class="cents-dot" id="centsDot"></div>
+      </div>
+
+      <!-- Cents Deviation / Current Note -->
+      <div class="cents-bar">
+        <div class="cents-note-row">
+          <span class="cents-note-name" id="centsNoteName">&mdash;</span>
+          <span class="cents-note-octave" id="centsNoteOctave"></span>
+          <span class="cents-note-freq" id="centsNoteFreq"></span>
+          <span
+            class="tuning-readout"
+            id="tuningReadout"
+            title="Estimated tuning of the incoming source. Tap to apply/ignore in key analysis."
+          ></span>
+        </div>
+        <div class="cents-scale">
+          <div class="cents-labels">
+            <span>-50&cent;</span>
+            <span id="centsCurrent">0&cent;</span>
+            <span>+50&cent;</span>
+          </div>
+          <div class="cents-track">
+            <div class="cents-center-line"></div>
+            <div class="cents-dot" id="centsDot"></div>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Pitch Graph (Piano Roll) -->
-    <div class="pitch-graph-container" id="graphContainer">
-      <div class="pitch-graph-labels" id="graphLabels"></div>
-      <div class="playhead"></div>
-      <canvas id="pitchCanvas"></canvas>
-    </div>
-
-    <!-- Controls -->
-    <div class="controls-row">
-      <div class="ctrl-group">
-        <label>Chroma</label>
-        <select id="chromaModeSelect">
-          <option value="duration" selected>Duration</option>
-          <option value="count">Note Count</option>
-        </select>
+      <!-- Pitch Graph (Piano Roll) -->
+      <div class="pitch-graph-container" id="graphContainer">
+        <div class="pitch-graph-labels" id="graphLabels"></div>
+        <div class="playhead"></div>
+        <canvas id="pitchCanvas"></canvas>
       </div>
-      <div class="ctrl-group">
-        <label>Window</label>
-        <select id="windowSelect">
-          <option value="0">All</option>
-          <option value="10">10s</option>
-          <option value="30" selected>30s</option>
-          <option value="60">60s</option>
-        </select>
+
+      <!-- Controls -->
+      <div class="controls-row">
+        <div class="ctrl-group">
+          <label>Chroma</label>
+          <select id="chromaModeSelect">
+            <option value="duration" selected>Duration</option>
+            <option value="count">Note Count</option>
+          </select>
+        </div>
+        <div class="ctrl-group">
+          <label>Window</label>
+          <select id="windowSelect">
+            <option value="0">All</option>
+            <option value="10">10s</option>
+            <option value="30" selected>30s</option>
+            <option value="60">60s</option>
+          </select>
+        </div>
+        <div class="ctrl-group">
+          <label>Noise</label>
+          <select id="noiseFloorSelect">
+            <option value="0.005">Low</option>
+            <option value="0.01" selected>Med</option>
+            <option value="0.025">High</option>
+            <option value="0.05">V.High</option>
+          </select>
+        </div>
       </div>
-      <div class="ctrl-group">
-        <label>Noise</label>
-        <select id="noiseFloorSelect">
-          <option value="0.005">Low</option>
-          <option value="0.01" selected>Med</option>
-          <option value="0.025">High</option>
-          <option value="0.05">V.High</option>
-        </select>
+
+      <!-- Histogram + Key -->
+      <div class="histogram-section">
+        <div class="histogram-header">
+          <span class="estimated-key empty" id="estimatedKey">Ready</span>
+          <span class="key-correlation" id="keyCorrelation"></span>
+        </div>
+        <div class="histogram-bars" id="histogramBars"></div>
+      </div>
+
+      <!-- Bottom Buttons -->
+      <div class="bottom-row">
+        <button class="control-btn start" id="controlBtn">START</button>
+        <button class="btn-capture" id="captureBtn">CAP</button>
+        <button class="btn-clear" id="clearBtn">CLR</button>
       </div>
     </div>
-
-    <!-- Histogram + Key -->
-    <div class="histogram-section">
-      <div class="histogram-header">
-        <span class="estimated-key empty" id="estimatedKey">Ready</span>
-        <span class="key-correlation" id="keyCorrelation"></span>
-      </div>
-      <div class="histogram-bars" id="histogramBars"></div>
-    </div>
-
-    <!-- Bottom Buttons -->
-    <div class="bottom-row">
-      <button class="control-btn start" id="controlBtn">START</button>
-      <button class="btn-capture" id="captureBtn">CAP</button>
-      <button class="btn-clear" id="clearBtn">CLR</button>
-    </div>
-  </div>
-
-  <script type="module" src="./js/app.js"></script>
-</body>
+    <script type="module" src="./js/app.js?v=2"></script>
+  </body>
 </html>
