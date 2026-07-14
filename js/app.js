@@ -20,6 +20,8 @@ import {
 } from './pipeline.js';
 import { PitchGraphRenderer, initHistogramBars } from './render.js';
 import { estimateTuningOffset } from './tuning.js';
+import { AudioFilterChain, FILTER_PRESETS } from './filter.js';
+import { SpectrumRenderer } from './spectrum.js';
 
 // How many recent accepted frames to keep for the rolling tuning estimate.
 const TUNING_FRAME_WINDOW = 300;
@@ -47,6 +49,11 @@ class KeyFinderApp {
     this.coalescer = new NoteCoalescer({ minDurationMs: 50 });
     this.capture = new CaptureBuffer();
 
+    // Audio filter chain (created on start, since it needs the AudioContext).
+    this.filterChain = null;
+    // Most recent detected pitch, for the spectrum marker.
+    this._lastDetectedHz = null;
+
     // Raw pitch line points for the graph (bounded ring).
     this.rawSamples = [];
     this.maxRawSamples = 1200;
@@ -72,11 +79,37 @@ class KeyFinderApp {
       this.dom.graphContainer,
       this.dom.graphLabels
     );
+    this.spectrum = new SpectrumRenderer(
+      this.dom.spectrumCanvas,
+      this.dom.spectrumWrap
+    );
 
     this._bindEvents();
     this.graph.render([], [], null);
+    // Draw the band immediately so the selected filter is visible before START.
+    this.spectrum.render(null, this._currentBand(), null);
+    this._renderBandLabel();
     this._renderKeyAndHistogram();
     console.log('[KeyFinderApp] base initialized');
+  }
+
+  /** The band for the currently-selected filter preset. */
+  _currentBand() {
+    const key = this.dom.filterSelect.value;
+    const preset = FILTER_PRESETS[key] || FILTER_PRESETS.off;
+    return { lowHz: preset.lowHz, highHz: preset.highHz };
+  }
+
+  _renderBandLabel() {
+    const b = this._currentBand();
+    const el = this.dom.spectrumBand;
+    if (!b.lowHz && !b.highHz) {
+      el.textContent = 'no filter';
+    } else {
+      const lo = b.lowHz ? `${b.lowHz}` : '0';
+      const hi = b.highHz ? `${b.highHz}` : '\u221E';
+      el.textContent = `${lo}\u2013${hi} Hz`;
+    }
   }
 
   _cacheDom() {
@@ -102,6 +135,11 @@ class KeyFinderApp {
       graphLabels: $('graphLabels'),
       tuningReadout: $('tuningReadout'),
       tuneBtn: $('tuneBtn'),
+      filterSelect: $('filterSelect'),
+      claritySelect: $('claritySelect'),
+      spectrumCanvas: $('spectrumCanvas'),
+      spectrumWrap: $('spectrumWrap'),
+      spectrumBand: $('spectrumBand'),
     };
   }
 
@@ -116,6 +154,32 @@ class KeyFinderApp {
     this.dom.tuningReadout.addEventListener('click', () => this._toggleApplyTuning());
     // TUNE button: calibrate view (wired in the next build step).
     this.dom.tuneBtn.addEventListener('click', () => this._onTuneButton());
+    // Filter preset: retune the band live (no restart needed).
+    this.dom.filterSelect.addEventListener('change', () => this._onFilterChange());
+    // Clarity threshold: applies to the detector immediately.
+    this.dom.claritySelect.addEventListener('change', () => this._onClarityChange());
+  }
+
+  _onFilterChange() {
+    const band = this._currentBand();
+    if (this.filterChain) {
+      this.filterChain.setBand(band);
+    }
+    this._renderBandLabel();
+    // Redraw immediately so the change is visible even while stopped.
+    if (!this.isListening) {
+      this.spectrum.render(null, band, null);
+    }
+    const preset = FILTER_PRESETS[this.dom.filterSelect.value];
+    console.log(`[KeyFinderApp] filter -> ${preset.label}: ${preset.note}`);
+  }
+
+  _onClarityChange() {
+    const c = parseFloat(this.dom.claritySelect.value);
+    if (this.detector) {
+      this.detector.clarityThreshold = c;
+    }
+    console.log(`[KeyFinderApp] clarity threshold -> ${c}`);
   }
 
   // -------------------------------------------------------------------------
@@ -191,11 +255,18 @@ class KeyFinderApp {
   // Current settings snapshot (also embedded in exported captures)
   // -------------------------------------------------------------------------
   _settings() {
+    const band = this._currentBand();
     return {
       noiseFloor: parseFloat(this.dom.noiseFloorSelect.value),
       windowSec: parseInt(this.dom.windowSelect.value, 10),
       chromaMode: this.dom.chromaModeSelect.value,
-      clarityThreshold: this.detector ? this.detector.clarityThreshold : 0.80,
+      // Filter state — essential for diagnosing captures.
+      filterPreset: this.dom.filterSelect.value,
+      filterLowHz: band.lowHz,
+      filterHighHz: band.highHz,
+      clarityThreshold: parseFloat(this.dom.claritySelect.value),
+      applyTuning: this._applyTuning,
+      tuningOffsetCents: this._tuning ? this._tuning.offsetCents : 0,
       fftSize: this.detector ? this.detector.fftSize : 4096,
       // Prefer the live context, but fall back to the detector's stored rate
       // (set at init) so the value survives even if audio has been torn down
@@ -225,8 +296,21 @@ class KeyFinderApp {
       });
       console.log(`[KeyFinderApp] Mic OK. SR=${this.audioContext.sampleRate}`);
 
-      this.detector = new PitchyDetector();
-      await this.detector.init(this.audioContext, this.mediaStream);
+      // Build the filter chain FIRST: source -> [band-pass] -> analyser.
+      // The detector reads from the POST-FILTER analyser, so out-of-band energy
+      // (e.g. a car engine at ~48 Hz) never reaches the pitch algorithm and
+      // therefore cannot win the winner-take-all pitch contest.
+      const source = this.audioContext.createMediaStreamSource(this.mediaStream);
+      this.filterChain = new AudioFilterChain(this.audioContext, source, {
+        fftSize: 4096,
+        rolloffStages: 2, // 24 dB/octave
+      });
+      this.filterChain.setBand(this._currentBand());
+
+      this.detector = new PitchyDetector({
+        clarityThreshold: parseFloat(this.dom.claritySelect.value),
+      });
+      await this.detector.init(this.audioContext, this.filterChain.filteredAnalyser);
 
       this.isListening = true;
       this._lastHopAt = 0;
@@ -257,6 +341,7 @@ class KeyFinderApp {
     this.coalescer.flush();
 
     if (this.detector) { this.detector.destroy(); this.detector = null; }
+    if (this.filterChain) { this.filterChain.destroy(); this.filterChain = null; }
     if (this.mediaStream) { this.mediaStream.getTracks().forEach((t) => t.stop()); this.mediaStream = null; }
     if (this.audioContext && this.audioContext.state !== 'closed') {
       try { await this.audioContext.close(); } catch (e) { /* already closing */ }
@@ -294,6 +379,15 @@ class KeyFinderApp {
     // Render every animation frame for smoothness, even between hops.
     this.graph.render(this.rawSamples, this.coalescer.notes, this.coalescer.peekCurrent(now));
 
+    // Spectrum: raw vs filtered, with band markers and the detected-pitch line.
+    if (this.filterChain) {
+      this.spectrum.render(
+        this.filterChain.getSpectra(),
+        this.filterChain.band,
+        this._lastDetectedHz
+      );
+    }
+
     this.animFrameId = requestAnimationFrame(() => this._loop());
   }
 
@@ -318,6 +412,7 @@ class KeyFinderApp {
 
     if (reason === GateReason.ACCEPTED) {
       this._silenceStartedAt = null;
+      this._lastDetectedHz = raw.frequency;
 
       const midiExact = freqToMidi(raw.frequency, this.coalescer.refA);
       frame.midiExact = midiExact;
@@ -343,6 +438,7 @@ class KeyFinderApp {
       this.graph.updateCenter(midiExact);
     } else {
       // Silence / no-pitch: after enough continuous silence, commit note.
+      this._lastDetectedHz = null;
       if (this._silenceStartedAt === null) this._silenceStartedAt = now;
       if (now - this._silenceStartedAt >= SILENCE_COMMIT_MS) {
         this.coalescer.flush();

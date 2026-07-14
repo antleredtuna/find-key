@@ -54,16 +54,26 @@ export class PitchyDetector {
     this._source = null;
   }
 
-  async init(audioContext, stream) {
+  /**
+   * Initialize the detector.
+   *
+   * The detector no longer creates its own analyser or connects to the source
+   * directly. Instead it is handed the FILTERED analyser from an
+   * AudioFilterChain, so that band-pass filtering happens BEFORE pitch
+   * detection. This is what stops a pitched rival (e.g. a car engine at ~48 Hz,
+   * NSDF clarity ~0.89) from winning the winner-take-all pitch contest against
+   * the actual instrument.
+   *
+   * @param {AudioContext} audioContext
+   * @param {AnalyserNode} analyserNode - the POST-FILTER analyser to read from
+   */
+  async init(audioContext, analyserNode) {
     console.log('[PitchyDetector] Initializing...');
     const { PitchDetector } = await import('https://esm.sh/pitchy@4');
 
     this.sampleRate = audioContext.sampleRate;
-    this.analyserNode = audioContext.createAnalyser();
-    this.analyserNode.fftSize = this.fftSize;
-
-    this._source = audioContext.createMediaStreamSource(stream);
-    this._source.connect(this.analyserNode);
+    this.analyserNode = analyserNode;
+    this.fftSize = analyserNode.fftSize;
 
     const bufLen = this.analyserNode.fftSize;
     this.detector = PitchDetector.forFloat32Array(bufLen);
@@ -110,10 +120,8 @@ export class PitchyDetector {
   }
 
   destroy() {
-    if (this._source) {
-      this._source.disconnect();
-      this._source = null;
-    }
+    // The detector does NOT own the analyser or the source — those belong to
+    // the AudioFilterChain, which tears them down. We only drop our references.
     this.analyserNode = null;
     this.detector = null;
     this.inputBuffer = null;
